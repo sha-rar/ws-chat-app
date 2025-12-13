@@ -93,7 +93,7 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		// Trust the server’s room, not the client’s
+		// Trust the server’s room (NOT the client’s)
 		msg.RoomID = c.roomID
 		msg.Timestamp = time.Now().UTC()
 

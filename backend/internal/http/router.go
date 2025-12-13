@@ -15,13 +15,13 @@ func NewRouter(hub *websocket.Hub) stdhttp.Handler {
 		websocket.ServeWs(hub, w, r)
 	})
 
-	// Simple health check.
+	// Simple health check
 	mux.HandleFunc("/healthz", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		w.WriteHeader(stdhttp.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// Test page.
+	// Test page
 	mux.HandleFunc("/test", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(testPageHTML))
@@ -30,7 +30,7 @@ func NewRouter(hub *websocket.Hub) stdhttp.Handler {
 	return mux
 }
 
-// inline HTML for quick testing
+// Inline HTML for quick testing
 const testPageHTML = `<!DOCTYPE html>
 <html>
   <head>
