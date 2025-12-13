@@ -3,56 +3,82 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "@/types";
+import { fetchRoomMessages } from "@/lib/api";
 
 type ConnectionStatus = "connecting" | "open" | "closed" | "error";
 
 interface UseWebSocketOptions {
-  username: string;
+  username: string | null;
   roomId: string;
+  token: string | null;
 }
 
-export function useWebSocket({ username, roomId }: UseWebSocketOptions) {
+export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    // If not authenticated yet, don't open a WebSocket
+    if (!username || !token) {
+      setMessages([]);
+      setStatus("closed");
+      return;
+    }
+
+    setMessages([]);
+    setStatus("connecting");
+
+    // fetch history
+    (async () => {
+      try {
+        const history = await fetchRoomMessages(roomId, 50);
+        if (!isCancelled && Array.isArray(history)) {
+          setMessages(history);
+        }
+      } catch (err) {
+        console.error("Failed to fetch history", err);
+      }
+    })();
+
     const wsUrl = `ws://localhost:8080/ws?roomId=${encodeURIComponent(
       roomId
-    )}`;
+    )}&token=${encodeURIComponent(token)}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
-    setStatus("connecting");
-
     ws.onopen = () => {
-      setStatus("open");
+      if (!isCancelled) setStatus("open");
     };
 
     ws.onclose = () => {
-      setStatus("closed");
+      if (!isCancelled) setStatus("closed");
     };
 
     ws.onerror = () => {
-      setStatus("error");
+      if (!isCancelled) setStatus("error");
     };
 
     ws.onmessage = (event: MessageEvent) => {
       try {
         const msg = JSON.parse(event.data) as ChatMessage;
-        setMessages((prev) => [...prev, msg]);
+        if (!isCancelled) {
+          setMessages((prev) => [...prev, msg]);
+        }
       } catch (err) {
-        // ignore malformed data for now
         console.error("Invalid message", err);
       }
     };
 
     return () => {
+      isCancelled = true;
       ws.close();
       wsRef.current = null;
     };
-  }, [roomId]);
+  }, [roomId, username, token]);
 
   const sendMessage = (text: string) => {
     if (!text.trim()) return;
@@ -60,9 +86,13 @@ export function useWebSocket({ username, roomId }: UseWebSocketOptions) {
       console.warn("WebSocket not open");
       return;
     }
+    if (!username || !token) {
+      console.warn("Not authenticated");
+      return;
+    }
 
     const payload = {
-      username,
+      username, // backend will override it anyway with auth username
       roomId,
       text,
     };

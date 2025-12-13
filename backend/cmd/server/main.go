@@ -6,7 +6,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/db"
 	apphttp "github.com/sha-rar/ws-chat-app/dev/backend/internal/http"
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/store"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/websocket"
 )
 
@@ -16,14 +18,21 @@ func main() {
 		port = "8080"
 	}
 
-	// Create the WebSocket hub to handle all clients + broadcasts
+	// Connect to DB
+	database, err := db.Connect()
+	if err != nil {
+		log.Fatalf("failed to connect to DB: %v", err)
+	}
+
+	// Initialise the default store with Postgres
+	pgStore := store.NewPostgresStore(database)
+	store.InitDefaultStore(pgStore)
+
 	hub := websocket.NewHub()
 	go hub.Run()
 
-	// Build the HTTP router and inject the hub
 	router := apphttp.NewRouter(hub)
 
-	// HTTP server config
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,

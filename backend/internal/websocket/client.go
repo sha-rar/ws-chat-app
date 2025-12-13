@@ -9,7 +9,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/auth"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/models"
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/store"
 )
 
 const (
@@ -30,17 +32,26 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a single WebSocket connection
 type Client struct {
-	hub    *Hub
-	conn   *websocket.Conn
-	send   chan []byte
-	roomID string
+	hub      *Hub
+	conn     *websocket.Conn
+	send     chan []byte
+	roomID   string
+	userID   int64
+	username string
 }
 
 // ServeWs upgrades the HTTP request to a WebSocket and registers a client
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	// Auth: extract token from query
+	tokenStr := r.URL.Query().Get("token")
+	if tokenStr == "" {
+		http.Error(w, "missing token", http.StatusUnauthorized)
+		return
+	}
+
+	claims, err := auth.ParseToken(tokenStr)
 	if err != nil {
-		log.Printf("websocket upgrade error: %v", err)
+		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
 
@@ -49,11 +60,19 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		roomID = "general"
 	}
 
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("websocket upgrade error: %v", err)
+		return
+	}
+
 	client := &Client{
-		hub:    hub,
-		conn:   conn,
-		send:   make(chan []byte, 256),
-		roomID: roomID,
+		hub:      hub,
+		conn:     conn,
+		send:     make(chan []byte, 256),
+		roomID:   roomID,
+		userID:   claims.UserID,
+		username: claims.Username,
 	}
 
 	client.hub.register <- client
@@ -93,9 +112,12 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		// Trust the server’s room (NOT the client’s)
+		// Server-controlled fields
 		msg.RoomID = c.roomID
+		msg.Username = c.username
 		msg.Timestamp = time.Now().UTC()
+
+		store.AddMessage(msg)
 
 		out, err := json.Marshal(msg)
 		if err != nil {

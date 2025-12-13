@@ -1,33 +1,101 @@
+// backend/internal/http/router.go
 package http
 
 import (
-	stdhttp "net/http"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
 
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/store"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/websocket"
 )
 
-// NewRouter builds the HTTP router for the app
-func NewRouter(hub *websocket.Hub) stdhttp.Handler {
-	mux := stdhttp.NewServeMux()
+func NewRouter(hub *websocket.Hub) http.Handler {
+	mux := http.NewServeMux()
 
-	// WebSocket endpoint: ws://localhost:8080/ws
-	mux.HandleFunc("/ws", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	// WebSocket
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		websocket.ServeWs(hub, w, r)
 	})
 
-	// Simple health check
-	mux.HandleFunc("/healthz", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
-		w.WriteHeader(stdhttp.StatusOK)
+	// Auth
+	mux.HandleFunc("/api/auth/register", handleRegister)
+	mux.HandleFunc("/api/auth/login", handleLogin)
+
+	// Message history
+	mux.HandleFunc("/api/rooms/", handleRoomMessages)
+
+	// Health
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
 	// Test page
-	mux.HandleFunc("/test", func(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(testPageHTML))
 	})
 
-	return mux
+	return withCORS(mux)
+}
+
+// GET /api/rooms/{roomId}/messages?limit=50
+func handleRoomMessages(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/api/rooms/")
+	parts := strings.Split(path, "/")
+	if len(parts) != 2 || parts[1] != "messages" {
+		http.NotFound(w, r)
+		return
+	}
+	roomID := parts[0]
+	if roomID == "" {
+		http.Error(w, "roomId is required", http.StatusBadRequest)
+		return
+	}
+
+	limit := 50
+	if ls := r.URL.Query().Get("limit"); ls != "" {
+		if parsed, err := strconv.Atoi(ls); err == nil && parsed > 0 && parsed <= 200 {
+			limit = parsed
+		}
+	}
+
+	msgs := store.GetRecentMessages(roomID, limit)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(msgs); err != nil {
+		http.Error(w, "failed to encode messages", http.StatusInternalServerError)
+		return
+	}
+}
+
+// Basic CORS wrapper for dev
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Allow frontend origin
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Inline HTML for quick testing
