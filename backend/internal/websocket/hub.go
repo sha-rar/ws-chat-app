@@ -1,18 +1,21 @@
 package websocket
 
-// Hub maintains the set of active clients and broadcasts messages
+type BroadcastMessage struct {
+	RoomID string
+	Data   []byte
+}
+
 type Hub struct {
-	clients    map[*Client]bool
-	broadcast  chan []byte
+	rooms      map[string]map[*Client]bool
+	broadcast  chan BroadcastMessage
 	register   chan *Client
 	unregister chan *Client
 }
 
-// NewHub creates a new Hub
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte),
+		rooms:      make(map[string]map[*Client]bool),
+		broadcast:  make(chan BroadcastMessage),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
@@ -23,21 +26,44 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.register:
-			h.clients[client] = true
-
-		case client := <-h.unregister:
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.send)
+			roomID := client.roomID
+			if roomID == "" {
+				roomID = "general"
+				client.roomID = roomID
 			}
 
-		case message := <-h.broadcast:
-			for client := range h.clients {
+			if h.rooms[roomID] == nil {
+				h.rooms[roomID] = make(map[*Client]bool)
+			}
+			h.rooms[roomID][client] = true
+
+		case client := <-h.unregister:
+			roomID := client.roomID
+			if roomClients, ok := h.rooms[roomID]; ok {
+				if _, exists := roomClients[client]; exists {
+					delete(roomClients, client)
+					close(client.send)
+					if len(roomClients) == 0 {
+						delete(h.rooms, roomID)
+					}
+				}
+			}
+
+		case msg := <-h.broadcast:
+			roomClients, ok := h.rooms[msg.RoomID]
+			if !ok {
+				continue
+			}
+
+			for client := range roomClients {
 				select {
-				case client.send <- message:
+				case client.send <- msg.Data:
 				default:
 					close(client.send)
-					delete(h.clients, client)
+					delete(roomClients, client)
+					if len(roomClients) == 0 {
+						delete(h.rooms, msg.RoomID)
+					}
 				}
 			}
 		}

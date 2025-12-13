@@ -2,11 +2,14 @@ package websocket
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
 
-	ws "github.com/gorilla/websocket"
+	"github.com/gorilla/websocket"
+
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/models"
 )
 
 const (
@@ -16,7 +19,7 @@ const (
 	maxMessageSize = 512
 )
 
-var upgrader = ws.Upgrader{
+var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	// LOCK DOWN LATER
@@ -27,9 +30,10 @@ var upgrader = ws.Upgrader{
 
 // Client represents a single WebSocket connection
 type Client struct {
-	hub  *Hub
-	conn *ws.Conn
-	send chan []byte
+	hub    *Hub
+	conn   *websocket.Conn
+	send   chan []byte
+	roomID string
 }
 
 // ServeWs upgrades the HTTP request to a WebSocket and registers a client
@@ -40,10 +44,16 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	roomID := r.URL.Query().Get("roomId")
+	if roomID == "" {
+		roomID = "general"
+	}
+
 	client := &Client{
-		hub:  hub,
-		conn: conn,
-		send: make(chan []byte, 256),
+		hub:    hub,
+		conn:   conn,
+		send:   make(chan []byte, 256),
+		roomID: roomID,
 	}
 
 	client.hub.register <- client
@@ -67,16 +77,36 @@ func (c *Client) readPump() {
 	})
 
 	for {
-		_, message, err := c.conn.ReadMessage()
+		_, messageBytes, err := c.conn.ReadMessage()
 		if err != nil {
-			if ws.IsUnexpectedCloseError(err, ws.CloseGoingAway, ws.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("websocket read error: %v", err)
 			}
 			break
 		}
 
-		message = bytes.TrimSpace(message)
-		c.hub.broadcast <- message
+		messageBytes = bytes.TrimSpace(messageBytes)
+
+		var msg models.Message
+		if err := json.Unmarshal(messageBytes, &msg); err != nil {
+			log.Printf("invalid message JSON: %v", err)
+			continue
+		}
+
+		// Trust the server’s room, not the client’s
+		msg.RoomID = c.roomID
+		msg.Timestamp = time.Now().UTC()
+
+		out, err := json.Marshal(msg)
+		if err != nil {
+			log.Printf("failed to marshal message: %v", err)
+			continue
+		}
+
+		c.hub.broadcast <- BroadcastMessage{
+			RoomID: c.roomID,
+			Data:   out,
+		}
 	}
 }
 
@@ -94,11 +124,11 @@ func (c *Client) writePump() {
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// Hub closed the channel
-				_ = c.conn.WriteMessage(ws.CloseMessage, []byte{})
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			w, err := c.conn.NextWriter(ws.TextMessage)
+			w, err := c.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
 			}
@@ -118,7 +148,7 @@ func (c *Client) writePump() {
 
 		case <-ticker.C:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(ws.PingMessage, nil); err != nil {
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
