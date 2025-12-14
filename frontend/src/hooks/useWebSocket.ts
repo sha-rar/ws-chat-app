@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessage } from "@/types";
+import type { ChatMessage, WSEvent } from "@/types";
 import { fetchRoomMessages } from "@/lib/api";
 
 type ConnectionStatus = "connecting" | "open" | "closed" | "error";
@@ -16,22 +16,28 @@ interface UseWebSocketOptions {
 export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
+
+  const typingTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map()
+  );
 
   useEffect(() => {
     let isCancelled = false;
 
-    // If not authenticated yet, don't open a WebSocket
     if (!username || !token) {
       setMessages([]);
       setStatus("closed");
+      setTypingUsers([]);
       return;
     }
 
     setMessages([]);
     setStatus("connecting");
+    setTypingUsers([]);
 
-    // fetch history
+    // 1) fetch history
     (async () => {
       try {
         const history = await fetchRoomMessages(roomId, 50);
@@ -43,10 +49,10 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
       }
     })();
 
+    // 2) open WebSocket
     const wsUrl = `ws://localhost:8080/ws?roomId=${encodeURIComponent(
       roomId
     )}&token=${encodeURIComponent(token)}`;
-
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
@@ -64,12 +70,44 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
 
     ws.onmessage = (event: MessageEvent) => {
       try {
-        const msg = JSON.parse(event.data) as ChatMessage;
-        if (!isCancelled) {
-          setMessages((prev) => [...prev, msg]);
+        const data = JSON.parse(event.data) as WSEvent;
+
+        if (data.type === "chat") {
+          const msg = data.message;
+          if (!isCancelled) {
+            setMessages((prev) => [...prev, msg]);
+            // remove chatter from typing list
+            setTypingUsers((prev) => prev.filter((u) => u !== msg.username));
+          }
+        } else if (data.type === "typing") {
+          const otherUser = data.username;
+          // ignore our own typing events
+          if (otherUser === username) return;
+
+          if (!isCancelled) {
+            // add / keep in typing list
+            setTypingUsers((prev) =>
+              prev.includes(otherUser) ? prev : [...prev, otherUser]
+            );
+
+            // reset timeout for this user
+            const timeouts = typingTimeoutsRef.current;
+            const existing = timeouts.get(otherUser);
+            if (existing) {
+              clearTimeout(existing);
+            }
+            const timeoutId = setTimeout(() => {
+              setTypingUsers((prev) =>
+                prev.filter((u) => u !== otherUser)
+              );
+              timeouts.delete(otherUser);
+            }, 3000);
+
+            timeouts.set(otherUser, timeoutId);
+          }
         }
       } catch (err) {
-        console.error("Invalid message", err);
+        console.error("Invalid WS event", err);
       }
     };
 
@@ -77,6 +115,12 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
       isCancelled = true;
       ws.close();
       wsRef.current = null;
+
+      // clear typing timeouts
+      typingTimeoutsRef.current.forEach((timeoutId) =>
+        clearTimeout(timeoutId)
+      );
+      typingTimeoutsRef.current.clear();
     };
   }, [roomId, username, token]);
 
@@ -92,9 +136,19 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
     }
 
     const payload = {
-      username, // backend will override it anyway with auth username
-      roomId,
+      type: "chat",
       text,
+    };
+
+    wsRef.current.send(JSON.stringify(payload));
+  };
+
+  const sendTyping = () => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    if (!username || !token) return;
+
+    const payload = {
+      type: "typing",
     };
 
     wsRef.current.send(JSON.stringify(payload));
@@ -103,6 +157,8 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
   return {
     messages,
     status,
+    typingUsers,
     sendMessage,
+    sendTyping,
   };
 }

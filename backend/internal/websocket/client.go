@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -106,28 +107,65 @@ func (c *Client) readPump() {
 
 		messageBytes = bytes.TrimSpace(messageBytes)
 
-		var msg models.Message
-		if err := json.Unmarshal(messageBytes, &msg); err != nil {
-			log.Printf("invalid message JSON: %v", err)
+		var incoming models.IncomingEvent
+		if err := json.Unmarshal(messageBytes, &incoming); err != nil {
+			log.Printf("invalid WS JSON: %v", err)
 			continue
 		}
 
-		// Server-controlled fields
-		msg.RoomID = c.roomID
-		msg.Username = c.username
-		msg.Timestamp = time.Now().UTC()
+		switch incoming.Type {
+		case "chat":
+			text := strings.TrimSpace(incoming.Text)
+			if text == "" {
+				continue
+			}
 
-		store.AddMessage(msg)
+			msg := models.Message{
+				Username:  c.username,
+				RoomID:    c.roomID,
+				Text:      text,
+				Timestamp: time.Now().UTC(),
+			}
 
-		out, err := json.Marshal(msg)
-		if err != nil {
-			log.Printf("failed to marshal message: %v", err)
+			// Store in DB
+			store.AddMessage(msg)
+
+			// Broadcast chat event
+			out := models.OutgoingChatEvent{
+				Type:    "chat",
+				Message: msg,
+			}
+			outBytes, err := json.Marshal(out)
+			if err != nil {
+				log.Printf("failed to marshal chat event: %v", err)
+				continue
+			}
+			c.hub.broadcast <- BroadcastMessage{
+				RoomID: c.roomID,
+				Data:   outBytes,
+			}
+
+		case "typing":
+			// broadcast typing event, no DB write
+			event := models.TypingEvent{
+				Type:     "typing",
+				Username: c.username,
+				RoomID:   c.roomID,
+				IsTyping: true,
+			}
+			outBytes, err := json.Marshal(event)
+			if err != nil {
+				log.Printf("failed to marshal typing event: %v", err)
+				continue
+			}
+			c.hub.broadcast <- BroadcastMessage{
+				RoomID: c.roomID,
+				Data:   outBytes,
+			}
+
+		default:
+			log.Printf("unknown WS event type: %s", incoming.Type)
 			continue
-		}
-
-		c.hub.broadcast <- BroadcastMessage{
-			RoomID: c.roomID,
-			Data:   out,
 		}
 	}
 }

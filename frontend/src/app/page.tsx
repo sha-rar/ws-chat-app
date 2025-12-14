@@ -10,14 +10,14 @@ export default function HomePage() {
         alignItems: "center",
         justifyContent: "center",
         fontFamily: "system-ui, sans-serif",
-        background: "#f3f4f6",
+        background: "#000000ff",
       }}
     >
       <div
         style={{
           padding: "32px 24px",
           borderRadius: 12,
-          background: "#ffffff",
+          background: "#000000ff",
           boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
           maxWidth: 420,
           width: "100%",
@@ -68,7 +68,7 @@ export default function HomePage() {
             </button>
           </Link>
 
-          <Link href="/chat">
+          <Link href="/chat?guest=1">
             <button
               type="button"
               style={{

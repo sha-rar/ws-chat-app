@@ -16,12 +16,7 @@ export default function ChatPage() {
       ? roomIdRaw[0]
       : "general";
 
-  const usernameFromQuery = searchParams.get("username") || "guest";
+  const forceGuest = searchParams.get("guest") === "1";
 
-  return (
-    <ChatRoom
-      initialRoomId={roomId}
-      initialUsername={usernameFromQuery}
-    />
-  );
+  return <ChatRoom initialRoomId={roomId} forceGuest={forceGuest} />;
 }
