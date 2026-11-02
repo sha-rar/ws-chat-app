@@ -1,5 +1,5 @@
 // frontend/src/lib/api.ts
-import type { ChatMessage, AuthResponse } from "@/types";
+import type { ChatMessage, AuthResponse, User } from "@/types";
 import { API_BASE_URL } from "@/lib/config";
 
 export async function fetchRoomMessages(
@@ -50,6 +50,33 @@ export async function loginUser(
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Login failed: ${res.status} ${text}`);
+  }
+
+  return res.json();
+}
+
+export async function logoutUser(token: string) {
+  const res = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  // 401 means the session is already gone, which is what we wanted
+  if (!res.ok && res.status !== 401) {
+    throw new Error(`Logout failed: ${res.status}`);
+  }
+}
+
+// Returns the logged-in user, or null if the token has expired or been revoked
+export async function fetchCurrentUser(token: string): Promise<User | null> {
+  const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+
+  if (res.status === 401) return null;
+  if (!res.ok) {
+    throw new Error(`Failed to fetch current user: ${res.status}`);
   }
 
   return res.json();

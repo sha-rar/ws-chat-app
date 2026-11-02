@@ -2,7 +2,14 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useSyncExternalStore } from "react";
+import { getStoredAuth } from "@/lib/auth";
+import { LogoutButton } from "@/components/LogoutButton";
+
+function subscribeToStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
 
 function ChatLobby() {
   const router = useRouter();
@@ -10,6 +17,12 @@ function ChatLobby() {
   const forceGuest = searchParams.get("guest") === "1";
 
   const [roomId, setRoomId] = useState("general");
+  // Read from localStorage on the client only; the server render has no user
+  const username = useSyncExternalStore(
+    subscribeToStorage,
+    () => (forceGuest ? null : getStoredAuth()?.user.username ?? null),
+    () => null
+  );
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +49,11 @@ function ChatLobby() {
           ? "You are in guest mode. You must log in to send messages."
           : "Choose a room to join."}
       </p>
+      {username && (
+        <p style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+          Logged in as <strong>{username}</strong> · <LogoutButton />
+        </p>
+      )}
 
       <form onSubmit={handleJoin} style={{ marginTop: 16 }}>
         <div style={{ marginBottom: 16 }}>

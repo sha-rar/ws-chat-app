@@ -6,8 +6,9 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { TypingIndicator } from "./TypingIndicator";
-import type { AuthResponse } from "@/types";
 import Link from "next/link";
+import { getStoredAuth } from "@/lib/auth";
+import { LogoutButton } from "./LogoutButton";
 
 interface ChatRoomProps {
   initialRoomId: string;
@@ -26,16 +27,10 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
       return;
     }
 
-    if (typeof window === "undefined") return;
-    const stored = localStorage.getItem("auth");
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored) as AuthResponse;
-      setUsername(parsed.user.username);
-      setToken(parsed.token);
-    } catch (err) {
-      console.error("Invalid auth in localStorage", err);
-    }
+    const auth = getStoredAuth();
+    if (!auth) return;
+    setUsername(auth.user.username);
+    setToken(auth.token);
   }, [forceGuest]);
 
   const isAuthed = !forceGuest && !!username && !!token;
@@ -61,7 +56,8 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
       <div style={{ marginBottom: 4, fontSize: 12, opacity: 0.7 }}>
         {isAuthed ? (
           <>
-            Logged in as: <strong>{displayName}</strong>
+            Logged in as: <strong>{displayName}</strong> ·{" "}
+            <Link href="/chat">Switch room</Link> · <LogoutButton />
           </>
         ) : (
           <>

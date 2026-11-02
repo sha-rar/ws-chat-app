@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { loginUser } from "@/lib/api";
 import type { AuthResponse } from "@/types";
 import Link from "next/link";
+import { setStoredAuth } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,9 +21,7 @@ export default function LoginPage() {
 
     try {
       const auth: AuthResponse = await loginUser(username, password);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("auth", JSON.stringify(auth));
-      }
+      setStoredAuth(auth);
       router.push("/chat");
     } catch (err: any) {
       setError(err.message || "Login failed");
