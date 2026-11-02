@@ -55,7 +55,8 @@ func (s *PostgresStore) GetRecentMessages(roomID string, limit int) ([]models.Me
 	}
 	defer rows.Close()
 
-	var out []models.Message
+	// Non-nil so an empty room encodes as [] rather than null
+	out := []models.Message{}
 	for rows.Next() {
 		var m models.Message
 		if err := rows.Scan(&m.ID, &m.RoomID, &m.Username, &m.Text, &m.Timestamp); err != nil {
