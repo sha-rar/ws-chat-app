@@ -36,12 +36,17 @@ func (s *PostgresStore) GetRecentMessages(roomID string, limit int) ([]models.Me
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
+	// Take the newest N messages, then return them oldest-first for display
 	query := `
 		SELECT room_id, username, text, timestamp
-		FROM messages
-		WHERE room_id = $1
-		ORDER BY timestamp ASC
-		LIMIT $2
+		FROM (
+			SELECT id, room_id, username, text, timestamp
+			FROM messages
+			WHERE room_id = $1
+			ORDER BY timestamp DESC, id DESC
+			LIMIT $2
+		) recent
+		ORDER BY timestamp ASC, id ASC
 	`
 	rows, err := s.db.QueryContext(ctx, query, roomID, limit)
 	if err != nil {
