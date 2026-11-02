@@ -2,6 +2,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { MAX_MESSAGE_LENGTH } from "@/lib/config";
 
 interface MessageInputProps {
   onSend: (text: string) => void;
@@ -54,40 +55,58 @@ export function MessageInput({
   };
 
   const placeholder = disabled ? disabledPlaceholder : "Type a message";
+  // Only show the counter once the user is getting close to the limit
+  const remaining = MAX_MESSAGE_LENGTH - value.length;
+  const showCounter = !disabled && remaining <= 100;
 
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      <input
-        type="text"
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        disabled={disabled}
-        style={{
-          flex: 1,
-          padding: 8,
-          borderRadius: 4,
-          border: "1px solid #444",
-          backgroundColor: disabled ? "#111827" : "#020617",
-          color: "#e5e7eb",
-          opacity: disabled ? 0.6 : 1,
-        }}
-      />
-      <button
-        onClick={handleSend}
-        disabled={disabled}
-        style={{
-          padding: "8px 16px",
-          borderRadius: 4,
-          border: "none",
-          background: disabled ? "#4b5563" : "#2563eb",
-          color: "#fff",
-          cursor: disabled ? "not-allowed" : "pointer",
-        }}
-      >
-        Send
-      </button>
+    <div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          type="text"
+          value={value}
+          maxLength={MAX_MESSAGE_LENGTH}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          style={{
+            flex: 1,
+            padding: 8,
+            borderRadius: 4,
+            border: "1px solid #444",
+            backgroundColor: disabled ? "#111827" : "#020617",
+            color: "#e5e7eb",
+            opacity: disabled ? 0.6 : 1,
+          }}
+        />
+        <button
+          onClick={handleSend}
+          disabled={disabled}
+          style={{
+            padding: "8px 16px",
+            borderRadius: 4,
+            border: "none",
+            background: disabled ? "#4b5563" : "#2563eb",
+            color: "#fff",
+            cursor: disabled ? "not-allowed" : "pointer",
+          }}
+        >
+          Send
+        </button>
+      </div>
+      {showCounter && (
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.7,
+            marginTop: 4,
+            textAlign: "right",
+          }}
+        >
+          {remaining} characters left
+        </div>
+      )}
     </div>
   );
 }

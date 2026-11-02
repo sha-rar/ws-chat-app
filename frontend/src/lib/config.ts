@@ -5,6 +5,9 @@ export const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
 ).replace(/\/+$/, "");
 
+// Must match MaxTextLength in backend/internal/websocket/client.go
+export const MAX_MESSAGE_LENGTH = 1000;
+
 // Defaults to the API host, switching http(s) to ws(s)
 export const WS_BASE_URL = (
   process.env.NEXT_PUBLIC_WS_URL || API_BASE_URL.replace(/^http/, "ws")

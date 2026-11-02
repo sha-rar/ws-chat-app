@@ -41,7 +41,7 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
   const isAuthed = !forceGuest && !!username && !!token;
   const displayName = isAuthed ? username : "guest";
 
-  const { messages, status, typingUsers, sendMessage, sendTyping } =
+  const { messages, status, typingUsers, serverError, sendMessage, sendTyping } =
     useWebSocket({
       username: isAuthed ? username : null,
       roomId,
@@ -82,6 +82,12 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
         typingUsers={typingUsers}
         currentUsername={username}
       />
+
+      {serverError && (
+        <div style={{ color: "#f87171", fontSize: 13, marginBottom: 4 }}>
+          {serverError}
+        </div>
+      )}
 
       <MessageInput
         onSend={sendMessage}

@@ -3,10 +3,12 @@ package websocket
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 
@@ -16,10 +18,13 @@ import (
 )
 
 const (
-	writeWait      = 10 * time.Second
-	pongWait       = 60 * time.Second
-	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 512
+	writeWait  = 10 * time.Second
+	pongWait   = 60 * time.Second
+	pingPeriod = (pongWait * 9) / 10
+	// maxMessageSize caps a raw frame; anything larger is treated as abuse and closes the connection
+	maxMessageSize = 8192
+	// MaxTextLength caps a chat message; longer ones are rejected with an error event
+	MaxTextLength = 1000
 )
 
 // Client represents a single WebSocket connection
@@ -118,6 +123,10 @@ func (c *Client) readPump() {
 			if text == "" {
 				continue
 			}
+			if utf8.RuneCountInString(text) > MaxTextLength {
+				c.sendError("message_too_long", fmt.Sprintf("Messages can be at most %d characters.", MaxTextLength))
+				continue
+			}
 
 			msg := models.Message{
 				Username:  c.username,
@@ -167,6 +176,20 @@ func (c *Client) readPump() {
 			continue
 		}
 	}
+}
+
+// sendError tells this client (and no one else) that its event was rejected
+func (c *Client) sendError(code, message string) {
+	outBytes, err := json.Marshal(models.ErrorEvent{
+		Type:    "error",
+		Code:    code,
+		Message: message,
+	})
+	if err != nil {
+		log.Printf("failed to marshal error event: %v", err)
+		return
+	}
+	c.hub.direct <- DirectMessage{Client: c, Data: outBytes}
 }
 
 // writePump writes messages from the hub to the WebSocket and sends pings

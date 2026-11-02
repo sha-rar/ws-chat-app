@@ -18,6 +18,7 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [serverError, setServerError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const typingTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
@@ -30,6 +31,7 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
     setMessages([]);
     setStatus("connecting");
     setTypingUsers([]);
+    setServerError(null);
 
     // 1) fetch history
     (async () => {
@@ -100,6 +102,8 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
 
             timeouts.set(otherUser, timeoutId);
           }
+        } else if (data.type === "error") {
+          if (!isCancelled) setServerError(data.message);
         }
       } catch (err) {
         console.error("Invalid WS event", err);
@@ -135,6 +139,7 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
       text,
     };
 
+    setServerError(null);
     wsRef.current.send(JSON.stringify(payload));
   };
 
@@ -153,6 +158,7 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
     messages,
     status,
     typingUsers,
+    serverError,
     sendMessage,
     sendTyping,
   };

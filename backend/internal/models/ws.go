@@ -10,6 +10,13 @@ type OutgoingChatEvent struct {
 	Message Message `json:"message"`
 }
 
+// ErrorEvent is sent only to the client whose event was rejected
+type ErrorEvent struct {
+	Type    string `json:"type"` // "error"
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 type TypingEvent struct {
 	Type     string `json:"type"` // "typing"
 	Username string `json:"username"`

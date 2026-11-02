@@ -5,9 +5,16 @@ type BroadcastMessage struct {
 	Data   []byte
 }
 
+// DirectMessage is delivered to a single client rather than its whole room
+type DirectMessage struct {
+	Client *Client
+	Data   []byte
+}
+
 type Hub struct {
 	rooms      map[string]map[*Client]bool
 	broadcast  chan BroadcastMessage
+	direct     chan DirectMessage
 	register   chan *Client
 	unregister chan *Client
 }
@@ -16,6 +23,7 @@ func NewHub() *Hub {
 	return &Hub{
 		rooms:      make(map[string]map[*Client]bool),
 		broadcast:  make(chan BroadcastMessage),
+		direct:     make(chan DirectMessage),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 	}
@@ -46,6 +54,15 @@ func (h *Hub) Run() {
 					if len(roomClients) == 0 {
 						delete(h.rooms, roomID)
 					}
+				}
+			}
+
+		case msg := <-h.direct:
+			// The client may have been dropped already; only send if still registered
+			if roomClients, ok := h.rooms[msg.Client.roomID]; ok && roomClients[msg.Client] {
+				select {
+				case msg.Client.send <- msg.Data:
+				default:
 				}
 			}
 

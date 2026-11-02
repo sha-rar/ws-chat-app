@@ -30,4 +30,11 @@ export type WSTypingEvent = {
   isTyping: boolean;
 };
 
-export type WSEvent = WSChatEvent | WSTypingEvent;
+// Sent only to us when the server rejects something we sent
+export type WSErrorEvent = {
+  type: "error";
+  code: string;
+  message: string;
+};
+
+export type WSEvent = WSChatEvent | WSTypingEvent | WSErrorEvent;
