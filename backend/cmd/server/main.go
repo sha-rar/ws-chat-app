@@ -14,6 +14,14 @@ import (
 )
 
 func main() {
+	envFile, err := config.LoadDotEnv()
+	if err != nil {
+		log.Fatalf("failed to load .env: %v", err)
+	}
+	if envFile != "" {
+		log.Printf("loaded settings from %s", envFile)
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("invalid configuration: %v", err)

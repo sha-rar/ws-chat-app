@@ -11,6 +11,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/sha-rar/ws-chat-app/dev/backend/config"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/db"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/store"
 )
@@ -19,10 +20,14 @@ import (
 // db.DB and the default store. The schema is dropped when the test finishes.
 //
 // Tests using it are skipped unless TEST_DATABASE_URL points at a Postgres database,
-// e.g. postgres://chatuser:chatpass@localhost:5432/chatapp?sslmode=disable
+// e.g. postgres://chatuser:chatpass@localhost:5432/chatapp?sslmode=disable.
+// It can be set in the environment or in the project's .env file.
 func NewDB(t *testing.T) *sql.DB {
 	t.Helper()
 
+	if _, err := config.LoadDotEnv(); err != nil {
+		t.Fatalf("load .env: %v", err)
+	}
 	baseURL := os.Getenv("TEST_DATABASE_URL")
 	if baseURL == "" {
 		t.Skip("set TEST_DATABASE_URL to run database tests")
