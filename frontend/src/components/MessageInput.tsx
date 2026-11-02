@@ -5,7 +5,8 @@ import { useRef, useState } from "react";
 import { MAX_MESSAGE_LENGTH } from "@/lib/config";
 
 interface MessageInputProps {
-  onSend: (text: string) => void;
+  // Return false to keep the text in the box (e.g. while disconnected)
+  onSend: (text: string) => boolean | void;
   disabled?: boolean;
   disabledPlaceholder?: string;
   onTyping?: () => void;
@@ -25,7 +26,7 @@ export function MessageInput({
 
     const text = value.trim();
     if (!text) return;
-    onSend(text);
+    if (onSend(text) === false) return;
     setValue("");
   };
 

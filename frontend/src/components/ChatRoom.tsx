@@ -1,13 +1,13 @@
 // frontend/src/components/ChatRoom.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { TypingIndicator } from "./TypingIndicator";
 import Link from "next/link";
-import { getStoredAuth } from "@/lib/auth";
+import { clearStoredAuth, getStoredAuth } from "@/lib/auth";
 import { LogoutButton } from "./LogoutButton";
 
 interface ChatRoomProps {
@@ -19,6 +19,7 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
   const [roomId] = useState(initialRoomId || "general");
   const [username, setUsername] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   useEffect(() => {
     if (forceGuest) {
@@ -36,11 +37,20 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
   const isAuthed = !forceGuest && !!username && !!token;
   const displayName = isAuthed ? username : "guest";
 
+  // Our login was revoked or expired: fall back to guest so we stay connected read-only
+  const handleAuthInvalid = useCallback(() => {
+    clearStoredAuth();
+    setUsername(null);
+    setToken(null);
+    setSessionEnded(true);
+  }, []);
+
   const { messages, status, typingUsers, serverError, sendMessage, sendTyping } =
     useWebSocket({
       username: isAuthed ? username : null,
       roomId,
       token: isAuthed ? token : null,
+      onAuthInvalid: handleAuthInvalid,
     });
 
   return (
@@ -61,6 +71,7 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
           </>
         ) : (
           <>
+            {sessionEnded && "Your session has ended. "}
             Viewing as <strong>guest</strong>.{" "}
             <Link href="/login">Login</Link> or{" "}
             <Link href="/register">register</Link> to send messages.
@@ -70,6 +81,7 @@ export function ChatRoom({ initialRoomId, forceGuest = false }: ChatRoomProps) {
 
       <div style={{ marginBottom: 4, fontSize: 12, opacity: 0.7 }}>
         Status: {status}
+        {status === "reconnecting" && " (connection lost, retrying...)"}
       </div>
 
       <MessageList messages={messages} />
