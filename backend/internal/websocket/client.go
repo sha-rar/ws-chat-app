@@ -143,8 +143,8 @@ func (c *Client) readPump() {
 				Timestamp: time.Now().UTC(),
 			}
 
-			// Store in DB
-			store.AddMessage(msg)
+			// Store in DB; the saved copy carries the ID clients use to de-duplicate
+			msg = store.AddMessage(msg)
 
 			// Broadcast chat event
 			out := models.OutgoingChatEvent{

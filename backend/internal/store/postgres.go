@@ -16,16 +16,17 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 	return &PostgresStore{db: db}
 }
 
-func (s *PostgresStore) AddMessage(msg models.Message) error {
+func (s *PostgresStore) AddMessage(msg models.Message) (models.Message, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	query := `
 		INSERT INTO messages (room_id, username, text, timestamp)
 		VALUES ($1, $2, $3, $4)
+		RETURNING id
 	`
-	_, err := s.db.ExecContext(ctx, query, msg.RoomID, msg.Username, msg.Text, msg.Timestamp)
-	return err
+	err := s.db.QueryRowContext(ctx, query, msg.RoomID, msg.Username, msg.Text, msg.Timestamp).Scan(&msg.ID)
+	return msg, err
 }
 
 func (s *PostgresStore) GetRecentMessages(roomID string, limit int) ([]models.Message, error) {
@@ -38,7 +39,7 @@ func (s *PostgresStore) GetRecentMessages(roomID string, limit int) ([]models.Me
 
 	// Take the newest N messages, then return them oldest-first for display
 	query := `
-		SELECT room_id, username, text, timestamp
+		SELECT id, room_id, username, text, timestamp
 		FROM (
 			SELECT id, room_id, username, text, timestamp
 			FROM messages
@@ -57,7 +58,7 @@ func (s *PostgresStore) GetRecentMessages(roomID string, limit int) ([]models.Me
 	var out []models.Message
 	for rows.Next() {
 		var m models.Message
-		if err := rows.Scan(&m.RoomID, &m.Username, &m.Text, &m.Timestamp); err != nil {
+		if err := rows.Scan(&m.ID, &m.RoomID, &m.Username, &m.Text, &m.Timestamp); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

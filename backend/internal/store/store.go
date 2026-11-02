@@ -8,7 +8,8 @@ import (
 )
 
 type Store interface {
-	AddMessage(msg models.Message) error
+	// AddMessage saves msg and returns it with its assigned ID
+	AddMessage(msg models.Message) (models.Message, error)
 	GetRecentMessages(roomID string, limit int) ([]models.Message, error)
 }
 
@@ -21,15 +22,19 @@ func InitDefaultStore(s Store) {
 }
 
 // AddMessage is a convenience wrapper around defaultStore.AddMessage
-func AddMessage(msg models.Message) {
+// If the store is nil or errors, it returns msg unchanged (with ID 0)
+func AddMessage(msg models.Message) models.Message {
 	if defaultStore == nil {
 		// no store configured; just log and return
 		log.Printf("store.AddMessage called but defaultStore is nil")
-		return
+		return msg
 	}
-	if err := defaultStore.AddMessage(msg); err != nil {
+	saved, err := defaultStore.AddMessage(msg)
+	if err != nil {
 		log.Printf("store.AddMessage error: %v", err)
+		return msg
 	}
+	return saved
 }
 
 // GetRecentMessages wraps defaultStore.GetRecentMessages

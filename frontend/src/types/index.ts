@@ -1,5 +1,7 @@
 // frontend/src/types/index.ts
 export interface ChatMessage {
+  // 0 if the server couldn't save the message
+  id: number;
   username: string;
   roomId: string;
   text: string;

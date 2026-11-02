@@ -11,6 +11,7 @@ type InMemoryStore struct {
 	mu         sync.RWMutex
 	rooms      map[string][]models.Message
 	maxPerRoom int
+	nextID     int64
 }
 
 func NewInMemoryStore(maxPerRoom int) *InMemoryStore {
@@ -20,9 +21,12 @@ func NewInMemoryStore(maxPerRoom int) *InMemoryStore {
 	}
 }
 
-func (s *InMemoryStore) AddMessage(msg models.Message) error {
+func (s *InMemoryStore) AddMessage(msg models.Message) (models.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.nextID++
+	msg.ID = s.nextID
 
 	msgs := append(s.rooms[msg.RoomID], msg)
 	if len(msgs) > s.maxPerRoom {
@@ -30,7 +34,7 @@ func (s *InMemoryStore) AddMessage(msg models.Message) error {
 		msgs = msgs[start:]
 	}
 	s.rooms[msg.RoomID] = msgs
-	return nil
+	return msg, nil
 }
 
 func (s *InMemoryStore) GetRecentMessages(roomID string, limit int) ([]models.Message, error) {

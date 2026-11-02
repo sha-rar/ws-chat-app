@@ -88,7 +88,7 @@ export function MessageList({ messages }: MessageListProps) {
           <div style={{ opacity: 0.6 }}>No messages yet. Say hi!</div>
         )}
         {safeMessages.map((m, idx) => (
-          <div key={idx} style={{ marginBottom: 4, fontSize: 14 }}>
+          <div key={m.id || `unsaved-${idx}`} style={{ marginBottom: 4, fontSize: 14 }}>
             <strong>{m.username}</strong>{" "}
             <span style={{ opacity: 0.7, fontSize: 12 }}>
               [{m.roomId}] {new Date(m.timestamp).toLocaleTimeString()}
