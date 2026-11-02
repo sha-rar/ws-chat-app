@@ -1,8 +1,6 @@
 // frontend/src/lib/api.ts
 import type { ChatMessage, AuthResponse } from "@/types";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+import { API_BASE_URL } from "@/lib/config";
 
 export async function fetchRoomMessages(
   roomId: string,

@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, WSEvent } from "@/types";
 import { fetchRoomMessages } from "@/lib/api";
+import { WS_BASE_URL } from "@/lib/config";
 
 type ConnectionStatus = "connecting" | "open" | "closed" | "error";
 
@@ -44,7 +45,7 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
 
     // 2) open WebSocket; without a token the server treats us as a read-only guest
     const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-    const wsUrl = `ws://localhost:8080/ws?roomId=${encodeURIComponent(
+    const wsUrl = `${WS_BASE_URL}/ws?roomId=${encodeURIComponent(
       roomId
     )}${tokenParam}`;
     const ws = new WebSocket(wsUrl);
