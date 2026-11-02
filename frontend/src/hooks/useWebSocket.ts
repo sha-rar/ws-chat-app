@@ -26,13 +26,6 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
   useEffect(() => {
     let isCancelled = false;
 
-    if (!username || !token) {
-      setMessages([]);
-      setStatus("closed");
-      setTypingUsers([]);
-      return;
-    }
-
     setMessages([]);
     setStatus("connecting");
     setTypingUsers([]);
@@ -49,10 +42,11 @@ export function useWebSocket({ username, roomId, token }: UseWebSocketOptions) {
       }
     })();
 
-    // 2) open WebSocket
+    // 2) open WebSocket; without a token the server treats us as a read-only guest
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
     const wsUrl = `ws://localhost:8080/ws?roomId=${encodeURIComponent(
       roomId
-    )}&token=${encodeURIComponent(token)}`;
+    )}${tokenParam}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

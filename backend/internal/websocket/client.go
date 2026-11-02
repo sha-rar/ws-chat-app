@@ -39,21 +39,22 @@ type Client struct {
 	roomID   string
 	userID   int64
 	username string
+	// guests can receive room events but not send any
+	isGuest bool
 }
 
 // ServeWs upgrades the HTTP request to a WebSocket and registers a client
 func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	// Auth: extract token from query
+	// Auth: extract token from query; no token means a read-only guest
+	var claims *auth.Claims
 	tokenStr := r.URL.Query().Get("token")
-	if tokenStr == "" {
-		http.Error(w, "missing token", http.StatusUnauthorized)
-		return
-	}
-
-	claims, err := auth.ParseToken(tokenStr)
-	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
-		return
+	if tokenStr != "" {
+		parsed, err := auth.ParseToken(tokenStr)
+		if err != nil {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+		claims = parsed
 	}
 
 	roomID := r.URL.Query().Get("roomId")
@@ -68,12 +69,15 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &Client{
-		hub:      hub,
-		conn:     conn,
-		send:     make(chan []byte, 256),
-		roomID:   roomID,
-		userID:   claims.UserID,
-		username: claims.Username,
+		hub:     hub,
+		conn:    conn,
+		send:    make(chan []byte, 256),
+		roomID:  roomID,
+		isGuest: claims == nil,
+	}
+	if claims != nil {
+		client.userID = claims.UserID
+		client.username = claims.Username
 	}
 
 	client.hub.register <- client
@@ -103,6 +107,10 @@ func (c *Client) readPump() {
 				log.Printf("websocket read error: %v", err)
 			}
 			break
+		}
+
+		if c.isGuest {
+			continue
 		}
 
 		messageBytes = bytes.TrimSpace(messageBytes)
