@@ -6,8 +6,7 @@ import type { ChatMessage, WSEvent } from "@/types";
 import { fetchCurrentUser, fetchRoomMessages } from "@/lib/api";
 import { WS_BASE_URL } from "@/lib/config";
 import { mergeMessages, parseEvents } from "@/lib/messages";
-
-type ConnectionStatus = "connecting" | "open" | "reconnecting" | "closed";
+import { createReconnectingSocket, type ConnectionStatus } from "@/lib/reconnect";
 
 interface UseWebSocketOptions {
   username: string | null;
@@ -16,9 +15,6 @@ interface UseWebSocketOptions {
   // Called when the server no longer accepts our token (logged out elsewhere or expired)
   onAuthInvalid?: () => void;
 }
-
-const RECONNECT_BASE_DELAY_MS = 1000;
-const RECONNECT_MAX_DELAY_MS = 15000;
 
 export function useWebSocket({
   username,
@@ -44,9 +40,6 @@ export function useWebSocket({
 
   useEffect(() => {
     let isCancelled = false;
-    let socket: WebSocket | null = null;
-    let attempts = 0;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     const typingTimeouts = typingTimeoutsRef.current;
 
     setMessages([]);
@@ -98,89 +91,45 @@ export function useWebSocket({
       }
     };
 
-    const scheduleReconnect = () => {
-      if (isCancelled || reconnectTimer) return;
-      // Exponential backoff with jitter so clients don't all retry at once
-      const delay =
-        Math.min(RECONNECT_MAX_DELAY_MS, RECONNECT_BASE_DELAY_MS * 2 ** attempts) *
-        (0.5 + Math.random() / 2);
-      attempts++;
-      setStatus("reconnecting");
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        connect();
-      }, delay);
-    };
+    // without a token the server treats us as a read-only guest
+    const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
+    const wsUrl = `${WS_BASE_URL}/ws?roomId=${encodeURIComponent(
+      roomId
+    )}${tokenParam}`;
 
-    const handleClose = async () => {
-      wsRef.current = null;
-      setTypingUsers([]);
-
+    const connection = createReconnectingSocket({
+      connect: ({ onOpen, onClose, onMessage }) => {
+        const ws = new WebSocket(wsUrl);
+        ws.onopen = onOpen;
+        ws.onclose = onClose;
+        ws.onmessage = (event: MessageEvent) => onMessage(event.data);
+        wsRef.current = ws;
+        return ws;
+      },
+      onOpen: loadHistory,
+      onMessage: (data) => parseEvents(String(data)).forEach(handleEvent),
+      onStatusChange: setStatus,
       // A closed socket may mean our session ended; don't retry with a dead token
-      if (token) {
-        try {
-          const user = await fetchCurrentUser(token);
-          if (isCancelled) return;
-          if (!user) {
-            setStatus("closed");
-            onAuthInvalidRef.current?.();
-            return;
-          }
-        } catch {
-          // Server unreachable; keep retrying
-        }
-      }
+      shouldReconnect: async () => {
+        wsRef.current = null;
+        setTypingUsers([]);
+        if (!token) return true;
 
-      scheduleReconnect();
-    };
-
-    const connect = () => {
-      if (isCancelled) return;
-
-      // without a token the server treats us as a read-only guest
-      const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-      const wsUrl = `${WS_BASE_URL}/ws?roomId=${encodeURIComponent(
-        roomId
-      )}${tokenParam}`;
-      const ws = new WebSocket(wsUrl);
-      socket = ws;
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        if (isCancelled) return;
-        attempts = 0;
-        setStatus("open");
-        loadHistory();
-      };
-
-      // onerror is always followed by onclose, so reconnecting is handled there
-      ws.onclose = () => {
-        if (!isCancelled && socket === ws) handleClose();
-      };
-
-      ws.onmessage = (event: MessageEvent) => {
-        if (isCancelled) return;
-        parseEvents(String(event.data)).forEach(handleEvent);
-      };
-    };
+        // Throws if the server is unreachable, which keeps us retrying
+        const user = await fetchCurrentUser(token);
+        if (user || isCancelled) return true;
+        onAuthInvalidRef.current?.();
+        return false;
+      },
+    });
 
     // Retry right away when the browser comes back online
-    const handleOnline = () => {
-      if (!reconnectTimer) return;
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-      attempts = 0;
-      connect();
-    };
-    window.addEventListener("online", handleOnline);
-
-    connect();
+    window.addEventListener("online", connection.retryNow);
 
     return () => {
       isCancelled = true;
-      window.removeEventListener("online", handleOnline);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      socket?.close();
+      window.removeEventListener("online", connection.retryNow);
+      connection.stop();
       wsRef.current = null;
 
       // clear typing timeouts
