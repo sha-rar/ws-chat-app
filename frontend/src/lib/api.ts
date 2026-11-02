@@ -1,7 +1,10 @@
 // frontend/src/lib/api.ts
 import type { ChatMessage, AuthResponse, User } from "@/types";
 import { API_BASE_URL } from "@/lib/config";
+import { isChatMessage } from "@/lib/messages";
 
+// Throws if the server is unreachable or returns an error; entries that
+// aren't valid messages are dropped
 export async function fetchRoomMessages(
   roomId: string,
   limit = 50
@@ -19,7 +22,13 @@ export async function fetchRoomMessages(
     throw new Error(`Failed to fetch messages: ${res.status}`);
   }
 
-  return res.json();
+  const body: unknown = await res.json();
+  // Older servers sent null for an empty room
+  if (body === null) return [];
+  if (!Array.isArray(body)) {
+    throw new Error("Failed to fetch messages: unexpected response");
+  }
+  return body.filter(isChatMessage);
 }
 
 export async function registerUser(username: string, password: string) {
