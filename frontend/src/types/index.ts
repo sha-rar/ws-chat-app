@@ -1,0 +1,42 @@
+// frontend/src/types/index.ts
+export interface ChatMessage {
+  // 0 if the server couldn't save the message
+  id: number;
+  username: string;
+  roomId: string;
+  text: string;
+  timestamp: string;
+}
+
+export interface User {
+  id: number;
+  username: string;
+  createdAt?: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+// WebSocket events from the backend
+export type WSChatEvent = {
+  type: "chat";
+  message: ChatMessage;
+};
+
+export type WSTypingEvent = {
+  type: "typing";
+  username: string;
+  roomId: string;
+  isTyping: boolean;
+};
+
+// Sent only to us when the server rejects something we sent
+export type WSErrorEvent = {
+  type: "error";
+  code: string;
+  message: string;
+};
+
+export type WSEvent = WSChatEvent | WSTypingEvent | WSErrorEvent;
