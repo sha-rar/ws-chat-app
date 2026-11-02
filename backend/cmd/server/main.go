@@ -24,6 +24,10 @@ func main() {
 		log.Fatalf("failed to connect to DB: %v", err)
 	}
 
+	if err := db.Migrate(database); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+
 	// Initialise the default store with Postgres
 	pgStore := store.NewPostgresStore(database)
 	store.InitDefaultStore(pgStore)
