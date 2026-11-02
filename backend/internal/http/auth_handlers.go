@@ -3,6 +3,7 @@ package http
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/auth"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/db"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/models"
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/websocket"
 )
 
 type authRequest struct {
@@ -127,7 +129,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.GenerateToken(user.ID, user.Username)
+	sessionID, expiresAt, err := auth.CreateSession(r.Context(), user.ID)
+	if err != nil {
+		log.Printf("create session: %v", err)
+		http.Error(w, "failed to create session", http.StatusInternalServerError)
+		return
+	}
+
+	token, err := auth.GenerateToken(user.ID, user.Username, sessionID, expiresAt)
 	if err != nil {
 		http.Error(w, "failed to generate token", http.StatusInternalServerError)
 		return
@@ -140,4 +149,36 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// POST /api/auth/logout: revokes the caller's session and closes its open sockets
+func handleLogout(hub *websocket.Hub) http.HandlerFunc {
+	return auth.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		claims := auth.ClaimsFromContext(r.Context())
+		if err := auth.RevokeSession(r.Context(), claims.ID); err != nil {
+			log.Printf("revoke session: %v", err)
+			http.Error(w, "failed to log out", http.StatusInternalServerError)
+			return
+		}
+		hub.DisconnectSession(claims.ID)
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+}
+
+// GET /api/auth/me: returns the logged-in user, or 401 if the session is no longer valid
+func handleMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	claims := auth.ClaimsFromContext(r.Context())
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(models.User{ID: claims.UserID, Username: claims.Username})
 }

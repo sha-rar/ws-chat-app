@@ -3,6 +3,7 @@ package websocket
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,12 +30,13 @@ const (
 
 // Client represents a single WebSocket connection
 type Client struct {
-	hub      *Hub
-	conn     *websocket.Conn
-	send     chan []byte
-	roomID   string
-	userID   int64
-	username string
+	hub       *Hub
+	conn      *websocket.Conn
+	send      chan []byte
+	roomID    string
+	userID    int64
+	username  string
+	sessionID string
 	// guests can receive room events but not send any
 	isGuest bool
 }
@@ -45,9 +47,12 @@ func ServeWs(hub *Hub, upgrader *websocket.Upgrader, w http.ResponseWriter, r *h
 	var claims *auth.Claims
 	tokenStr := r.URL.Query().Get("token")
 	if tokenStr != "" {
-		parsed, err := auth.ParseToken(tokenStr)
+		parsed, err := auth.Authenticate(r.Context(), tokenStr)
 		if err != nil {
-			http.Error(w, "invalid token", http.StatusUnauthorized)
+			if !errors.Is(err, auth.ErrInvalidToken) {
+				log.Printf("websocket authenticate: %v", err)
+			}
+			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 		claims = parsed
@@ -74,6 +79,7 @@ func ServeWs(hub *Hub, upgrader *websocket.Upgrader, w http.ResponseWriter, r *h
 	if claims != nil {
 		client.userID = claims.UserID
 		client.username = claims.Username
+		client.sessionID = claims.ID
 	}
 
 	client.hub.register <- client
@@ -99,7 +105,9 @@ func (c *Client) readPump() {
 	for {
 		_, messageBytes, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err,
+				websocket.CloseNormalClosure, websocket.CloseGoingAway,
+				websocket.CloseNoStatusReceived, websocket.CloseAbnormalClosure) {
 				log.Printf("websocket read error: %v", err)
 			}
 			break
@@ -205,8 +213,9 @@ func (c *Client) writePump() {
 		case message, ok := <-c.send:
 			_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// Hub closed the channel
-				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				// Hub closed the channel (logout or slow client)
+				_ = c.conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 				return
 			}
 

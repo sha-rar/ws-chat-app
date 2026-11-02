@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/sha-rar/ws-chat-app/dev/backend/config"
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/auth"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/store"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/websocket"
 )
@@ -24,6 +25,8 @@ func NewRouter(cfg *config.Config, hub *websocket.Hub) http.Handler {
 	// Auth
 	mux.HandleFunc("/api/auth/register", handleRegister)
 	mux.HandleFunc("/api/auth/login", handleLogin)
+	mux.HandleFunc("/api/auth/logout", handleLogout(hub))
+	mux.HandleFunc("/api/auth/me", auth.RequireAuth(handleMe))
 
 	// Message history
 	mux.HandleFunc("/api/rooms/", handleRoomMessages)

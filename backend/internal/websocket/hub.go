@@ -17,6 +17,7 @@ type Hub struct {
 	direct     chan DirectMessage
 	register   chan *Client
 	unregister chan *Client
+	revoke     chan string
 }
 
 func NewHub() *Hub {
@@ -26,7 +27,16 @@ func NewHub() *Hub {
 		direct:     make(chan DirectMessage),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		revoke:     make(chan string),
 	}
+}
+
+// DisconnectSession closes every socket opened with the given session, e.g. after logout
+func (h *Hub) DisconnectSession(sessionID string) {
+	if sessionID == "" {
+		return
+	}
+	h.revoke <- sessionID
 }
 
 // Run listens for register/unregister/broadcast events
@@ -54,6 +64,20 @@ func (h *Hub) Run() {
 					if len(roomClients) == 0 {
 						delete(h.rooms, roomID)
 					}
+				}
+			}
+
+		case sessionID := <-h.revoke:
+			// Closing send makes writePump close the socket
+			for roomID, roomClients := range h.rooms {
+				for client := range roomClients {
+					if client.sessionID == sessionID {
+						close(client.send)
+						delete(roomClients, client)
+					}
+				}
+				if len(roomClients) == 0 {
+					delete(h.rooms, roomID)
 				}
 			}
 

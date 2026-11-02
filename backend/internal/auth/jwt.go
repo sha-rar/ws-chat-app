@@ -24,15 +24,16 @@ func getSecret() []byte {
 	return secret
 }
 
-func GenerateToken(userID int64, username string) (string, error) {
-	now := time.Now()
+// GenerateToken signs a token for the given session; its ID is the token's jti
+func GenerateToken(userID int64, username, sessionID string, expiresAt time.Time) (string, error) {
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        sessionID,
 			Subject:   username,
-			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
@@ -43,7 +44,7 @@ func GenerateToken(userID int64, username string) (string, error) {
 func ParseToken(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return getSecret(), nil
-	})
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
 		return nil, err
 	}
