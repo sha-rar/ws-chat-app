@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx as database/sql driver
@@ -11,15 +10,9 @@ import (
 
 var DB *sql.DB
 
-func Connect() (*sql.DB, error) {
+func Connect(dsn string) (*sql.DB, error) {
 	if DB != nil {
 		return DB, nil
-	}
-
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		// default
-		dsn = "postgres://chatuser:chatpass@localhost:5432/chatapp?sslmode=disable"
 	}
 
 	db, err := sql.Open("pgx", dsn)

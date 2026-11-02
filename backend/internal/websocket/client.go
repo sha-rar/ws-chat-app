@@ -22,15 +22,6 @@ const (
 	maxMessageSize = 512
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	// LOCK DOWN LATER
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 // Client represents a single WebSocket connection
 type Client struct {
 	hub      *Hub
@@ -44,7 +35,7 @@ type Client struct {
 }
 
 // ServeWs upgrades the HTTP request to a WebSocket and registers a client
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
+func ServeWs(hub *Hub, upgrader *websocket.Upgrader, w http.ResponseWriter, r *http.Request) {
 	// Auth: extract token from query; no token means a read-only guest
 	var claims *auth.Claims
 	tokenStr := r.URL.Query().Get("token")

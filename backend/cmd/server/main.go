@@ -3,9 +3,10 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 	"time"
 
+	"github.com/sha-rar/ws-chat-app/dev/backend/config"
+	"github.com/sha-rar/ws-chat-app/dev/backend/internal/auth"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/db"
 	apphttp "github.com/sha-rar/ws-chat-app/dev/backend/internal/http"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/store"
@@ -13,13 +14,14 @@ import (
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("invalid configuration: %v", err)
 	}
+	auth.SetSecret(cfg.JWTSecret)
 
 	// Connect to DB
-	database, err := db.Connect()
+	database, err := db.Connect(cfg.DatabaseURL)
 	if err != nil {
 		log.Fatalf("failed to connect to DB: %v", err)
 	}
@@ -35,17 +37,17 @@ func main() {
 	hub := websocket.NewHub()
 	go hub.Run()
 
-	router := apphttp.NewRouter(hub)
+	router := apphttp.NewRouter(cfg, hub)
 
 	server := &http.Server{
-		Addr:         ":" + port,
+		Addr:         ":" + cfg.Port,
 		Handler:      router,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.Printf("Server listening on http://localhost:%s\n", port)
+	log.Printf("Server listening on http://localhost:%s (%s)\n", cfg.Port, cfg.Env)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)

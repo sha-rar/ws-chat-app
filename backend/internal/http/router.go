@@ -7,16 +7,18 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sha-rar/ws-chat-app/dev/backend/config"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/store"
 	"github.com/sha-rar/ws-chat-app/dev/backend/internal/websocket"
 )
 
-func NewRouter(hub *websocket.Hub) http.Handler {
+func NewRouter(cfg *config.Config, hub *websocket.Hub) http.Handler {
 	mux := http.NewServeMux()
 
 	// WebSocket
+	upgrader := websocket.NewUpgrader(cfg.AllowedOrigins)
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
-		websocket.ServeWs(hub, w, r)
+		websocket.ServeWs(hub, upgrader, w, r)
 	})
 
 	// Auth
@@ -32,13 +34,15 @@ func NewRouter(hub *websocket.Hub) http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	// Test page
-	mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(testPageHTML))
-	})
+	// Test page (development only)
+	if !cfg.IsProduction() {
+		mux.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(testPageHTML))
+		})
+	}
 
-	return withCORS(mux)
+	return withCORS(cfg.AllowedOrigins, mux)
 }
 
 // GET /api/rooms/{roomId}/messages?limit=50
@@ -81,11 +85,18 @@ func handleRoomMessages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Basic CORS wrapper for dev
-func withCORS(next http.Handler) http.Handler {
+// CORS wrapper that only allows the configured frontend origins
+func withCORS(allowedOrigins []string, next http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		allowed[o] = true
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Allow frontend origin
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		if origin := r.Header.Get("Origin"); allowed[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Add("Vary", "Origin")
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 

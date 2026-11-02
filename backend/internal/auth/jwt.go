@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -14,13 +13,15 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+var secret []byte
+
+// SetSecret sets the key used to sign and verify tokens; call it once at startup
+func SetSecret(s string) {
+	secret = []byte(s)
+}
+
 func getSecret() []byte {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		// dev default; for prod, set JWT_SECRET env
-		secret = "dev-secret-change-me"
-	}
-	return []byte(secret)
+	return secret
 }
 
 func GenerateToken(userID int64, username string) (string, error) {
