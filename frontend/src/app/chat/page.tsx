@@ -2,9 +2,9 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 
-export default function ChatLobbyPage() {
+function ChatLobby() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const forceGuest = searchParams.get("guest") === "1";
@@ -71,5 +71,14 @@ export default function ChatLobbyPage() {
         </button>
       </form>
     </div>
+  );
+}
+
+// useSearchParams() needs a Suspense boundary so the page can be prerendered
+export default function ChatLobbyPage() {
+  return (
+    <Suspense>
+      <ChatLobby />
+    </Suspense>
   );
 }

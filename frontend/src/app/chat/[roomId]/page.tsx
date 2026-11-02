@@ -2,9 +2,10 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { ChatRoom } from "@/components/ChatRoom";
 
-export default function ChatPage() {
+function ChatRoomPage() {
   const params = useParams<{ roomId: string }>();
   const searchParams = useSearchParams();
 
@@ -19,4 +20,13 @@ export default function ChatPage() {
   const forceGuest = searchParams.get("guest") === "1";
 
   return <ChatRoom initialRoomId={roomId} forceGuest={forceGuest} />;
+}
+
+// useSearchParams() needs a Suspense boundary so the page can be prerendered
+export default function ChatPage() {
+  return (
+    <Suspense>
+      <ChatRoomPage />
+    </Suspense>
+  );
 }
