@@ -28,6 +28,18 @@ export function useWebSocket({
   const [serverError, setServerError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Start fresh when switching rooms or users; done during render rather than
+  // in the effect so React doesn't render the stale room first
+  const connectionKey = `${roomId}\n${username ?? ""}\n${token ?? ""}`;
+  const [prevConnectionKey, setPrevConnectionKey] = useState(connectionKey);
+  if (connectionKey !== prevConnectionKey) {
+    setPrevConnectionKey(connectionKey);
+    setMessages([]);
+    setStatus("connecting");
+    setTypingUsers([]);
+    setServerError(null);
+  }
+
   const typingTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   );
@@ -41,11 +53,6 @@ export function useWebSocket({
   useEffect(() => {
     let isCancelled = false;
     const typingTimeouts = typingTimeoutsRef.current;
-
-    setMessages([]);
-    setStatus("connecting");
-    setTypingUsers([]);
-    setServerError(null);
 
     // Fetch history on every (re)connect to fill in anything missed while offline
     const loadHistory = async () => {
