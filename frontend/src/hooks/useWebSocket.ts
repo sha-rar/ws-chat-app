@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, WSEvent } from "@/types";
 import { fetchCurrentUser, fetchRoomMessages } from "@/lib/api";
 import { WS_BASE_URL } from "@/lib/config";
+import { mergeMessages, parseEvents } from "@/lib/messages";
 
 type ConnectionStatus = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -18,25 +19,6 @@ interface UseWebSocketOptions {
 
 const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 15000;
-
-// Combines two message lists, dropping duplicates by ID and keeping them in time order
-function mergeMessages(a: ChatMessage[], b: ChatMessage[]): ChatMessage[] {
-  const seen = new Set<number>();
-  const merged: ChatMessage[] = [];
-  for (const m of [...a, ...b]) {
-    // ID 0 means the server couldn't save it, so there's nothing to de-duplicate on
-    if (m.id) {
-      if (seen.has(m.id)) continue;
-      seen.add(m.id);
-    }
-    merged.push(m);
-  }
-  return merged.sort(
-    (x, y) =>
-      new Date(x.timestamp).getTime() - new Date(y.timestamp).getTime() ||
-      x.id - y.id
-  );
-}
 
 export function useWebSocket({
   username,
@@ -178,15 +160,7 @@ export function useWebSocket({
 
       ws.onmessage = (event: MessageEvent) => {
         if (isCancelled) return;
-        // The server may batch several events into one frame, one per line
-        for (const line of String(event.data).split("\n")) {
-          if (!line.trim()) continue;
-          try {
-            handleEvent(JSON.parse(line) as WSEvent);
-          } catch (err) {
-            console.error("Invalid WS event", err);
-          }
-        }
+        parseEvents(String(event.data)).forEach(handleEvent);
       };
     };
 
